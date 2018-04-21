@@ -21,7 +21,8 @@ function read(filename)
         tmp = split(line, " ")
         if length(tmp) <= 1
             println("weird at line: ", cc)
-            continue
+            println(tmp)
+	    continue
         end
 
         if tmp[1] != ""
@@ -38,8 +39,12 @@ function read(filename)
             push!(val_lbl, 1)
         end
 
+	#println(tmp)
         for i = 2:length(tmp)
-            idx, val = split(tmp[i], ":")
+            if tmp[i] == ""
+		continue
+	    end
+	    idx, val = split(tmp[i], ":")
             idx = parse(Int, idx)
             val = parse(Float64, val)
             push!(col_ft, idx+1 )
