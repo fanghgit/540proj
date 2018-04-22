@@ -1,3 +1,26 @@
+function read_cat_hier(filename, K)
+    f = open(filename, "r")
+    rows = zeros(Int, 0)
+    cols = zeros(Int, 0)
+    vals = zeros(Float64, 0)
+    cc = 1
+    for line in eachline(f)
+        tmp = split(line, " ")
+        if length(tmp) > 2
+            error("more than 2 labels")
+        end
+        lbl1 = parse(Int, tmp[1])
+        lbl2 = parse(Int, tmp[2])
+        push!(rows, lbl1)
+        push!(cols, lbl2)
+        push!(vals, 1.0)
+        push!(rows, lbl2)
+        push!(cols, lbl1)
+        push!(vals, 1.0)
+    end
+    adj_mat = sparse(rows, cols, vals, K, K)
+    return adj_mat
+end
 
 function read(filename)
     f = open(filename, "r")
@@ -34,7 +57,7 @@ function read(filename)
         lbls = [ parse(Int, x) for x in lbls ]
 
         for lbl in lbls
-            push!(row_lbl, lbl+1)
+            push!(row_lbl, lbl)
             push!(col_lbl, cc)
             push!(val_lbl, 1)
         end
@@ -47,7 +70,7 @@ function read(filename)
 	    idx, val = split(tmp[i], ":")
             idx = parse(Int, idx)
             val = parse(Float64, val)
-            push!(col_ft, idx+1 )
+            push!(col_ft, idx )
             push!(val_ft, val)
             push!(row_ft, cc)
         end

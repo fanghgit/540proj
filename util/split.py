@@ -43,7 +43,7 @@ if __name__ == "__main__":
     for i in range(n_train):
         train_dict[ perm[i] ] = 1
     for line in f:
-	line = line.strip('\n')
+        line = line.strip('\n')
         if line_number in train_dict:
             print(line, file = f_train)
         else:
