@@ -39,7 +39,7 @@ function get_grad(X, Y, W, L, C, lambda)
     N, D = size(X)
     K = size(W, 2)
     XT = X';
-    res = W*L
+    res = 2*W*L
     for i = 1:K
         #@printf "i=%d\n" i
         wi = W[:,i]
@@ -51,10 +51,10 @@ function get_grad(X, Y, W, L, C, lambda)
             if tmp[j] > 0
                 xj = XT[:,j]
                 idx, vals = findnz(xj)
-                for pp in length(idx)
+                for pp = 1:length(idx)
                     res[ idx[pp] ,i] += (2*C*tmp[j]*(-Yi[j]))*vals[pp] 
                 end
-                #res[:,i] += (2*C*tmp[j]*(-Yi[j]))*X[j,:]
+                #res[:,i] += (2*C*tmp[j]*(-Yi[j]))*xj
             end
         end
     end
