@@ -27,7 +27,7 @@ function obj(X, Y, W, adj_mat, C, lambda)
         tmp = nzrange(adj_mat, i)
         neighbours = rows[tmp]
         for j in neighbours
-            res += vecnorm( W[:,i]-W[:,j], 2 )^2 
+            res += vecnorm( W[:,i]-W[:,j], 2 )^2/2
         end
     end
     #L = sparse(Dmat - adj_mat)
