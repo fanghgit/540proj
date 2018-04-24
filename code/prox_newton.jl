@@ -87,14 +87,16 @@ function Ha(X, Y, W, L, XW, a, C, lambda)
     
     XMa = X*Ma
     
-    rows = rowvals(L)
-    vals = nonzeros(L)
+    #rows = rowvals(L)
+    #vals = nonzeros(L)
     for k = 1:K
-        tmp = nzrange(L, k)
-        neighbours = rows[tmp]
-        vv = vals[tmp]
+        #tmp = nzrange(L, k)
+        Lk = L[:,k]
+        neighbours, vv = findnz(Lk)
+        #neighbours = rows[tmp]
+        #vv = vals[tmp]
         for pp = 1:length(neighbours)
-            res[ ((k-1)*D+1):(k*D)] = 2*a[ ((neighbours[pp]-1)*D+1):(neighbours[pp]*D)]*vals[pp]
+            res[ ((k-1)*D+1):(k*D)] += 2*a[ ((neighbours[pp]-1)*D+1):(neighbours[pp]*D)]*vv[pp]
         end
         #res[(k-1)*D +  ]
     end
@@ -132,6 +134,8 @@ function proximal_newton(X, Y, A, C, lambda, tol=1e-4, eps = 1e-4, maxiter = 100
         Diag[i] = sum( A[:,i] ) 
     end
     DG = diagm(Diag)
+    #@show(size(A))
+    #@show(size(DG))
     L = sparse(DG - A)
     
     
@@ -146,11 +150,11 @@ function proximal_newton(X, Y, A, C, lambda, tol=1e-4, eps = 1e-4, maxiter = 100
         diagH = zeros(round(D*K))
         for k = 1:K
             #@show(Diag[k])
-            diagH[ round((k-1)*D+1): round(k*D)] = Diag[k]
+            diagH[ round((k-1)*D+1): round(k*D)] = 2*Diag[k]
         end
         
         XW = X*W
-        XW2 = copy(XW)
+        XDelta = zeros(N,K)
         
         for k = 1:K
             wk = W[:,k]
@@ -179,7 +183,7 @@ function proximal_newton(X, Y, A, C, lambda, tol=1e-4, eps = 1e-4, maxiter = 100
         cols = zeros(Int64, 0)
         for j = 1:D
             for k = 1:K
-                if abs(g[j,k]) > lambda - eps && W[j,k] == 0
+                if abs(g[j,k]) > lambda - eps || W[j,k] != 0
                     push!(rows, j)
                     push!(cols, k)
                 end
@@ -197,7 +201,20 @@ function proximal_newton(X, Y, A, C, lambda, tol=1e-4, eps = 1e-4, maxiter = 100
         ### check 
         
         check_approx1 = lambda*vecnorm(W, 1) 
-        check_d = zeros(D,K)
+        #check_d = zeros(D,K)
+        Delta = zeros(D,K)
+        
+        #H_check = 2*kron(L, eye(D))
+        #for k = 1:K
+        #    for i = 1:N
+        #        xi = XT[:,i]
+        #        if 1 - Y_full[i,k]*XW[i,k] > 0
+        #            H_check[ ((k-1)*D+1):(k*D), ((k-1)*D+1):(k*D) ] += 2*C*xi*xi'
+        #        end
+        #    end
+        #     
+        #end
+        
         ###
         @printf "start coordinate descent!\n"
         for l = 1:length(rows)
@@ -213,9 +230,16 @@ function proximal_newton(X, Y, A, C, lambda, tol=1e-4, eps = 1e-4, maxiter = 100
             H0w = 0
             Lk = L[:,k]
             idxs, vals = findnz(Lk)
+            
+            #check
+            h0_check = 0
             for pp = 1:length(idxs)
                 kk = idxs[pp]
-                H0w += 2*W[j,kk]*vals[pp] 
+                H0w += 2*Delta[j,kk]*vals[pp] 
+                #check
+                #if kk == k
+                #    h0_check += 2*vals[pp]
+                #end
             end
     
             xj = X[:,j]
@@ -224,13 +248,42 @@ function proximal_newton(X, Y, A, C, lambda, tol=1e-4, eps = 1e-4, maxiter = 100
                 ii = idxs[pp]
                     # time consuming?
                 if 1 - Y_full[ii,k]*XW[ii,k] > 0
-                    H0w += 2*C*vals[pp]*XW2[ii,k] 
+                    H0w += 2*C*vals[pp]*XDelta[ii,k] 
+                    #check 
+                    #h0_check += 2*C*vals[pp]^2
                 end
             end
+            
+            #if abs(h0_check - h0) > 1e-5
+            #    @printf "h0: %f, h0_check: %f, H_check[]: %f\n" h0 h0_check H_check[idx,idx]
+            #    error("h0 check fails") 
+            #end
+            
+            #### check H0w
+            #H0w_check = dot( H_check[ (k-1)*D+j ,:], vec(Delta) )
+            #if abs(H0w - H0w_check) > 1e-4
+            #    @printf "H0w_check: %f, H0w: %f\n" H0w_check H0w
+            #    error("H0w check fails") 
+            #end
+            
+            #Hd = Ha(X, Y, W, L, XW, vec(W), C, lambda)
+            #Hd_check = H_check*vec(W)
+            #if vecnorm(Hd_check - Hd) > 1e-4
+            #    error("Ha check fails") 
+            #end
+            
+            
     
-            H0w -= h0*W[j,k]
+            H0w -= h0* Delta[j,k]
+            
+            ### check
+            #H0w = (H_check*vec(check_d))[idx]
+            #H0w -= H_check[idx, idx]*check_d[j,k]
+            #h0 = H_check[idx, idx]
+            
             deno += H0w
             if h0 <= 0
+                @printf "h0: %f\n" h0
                 error("h0 < 0 ") 
             end
             delta_jk = -deno/h0
@@ -248,10 +301,10 @@ function proximal_newton(X, Y, A, C, lambda, tol=1e-4, eps = 1e-4, maxiter = 100
             obj1 = lambda*abs(W[j,k])
             obj2 = h0/2*diff^2 + diff*deno + lambda*abs(W[j,k]+diff)
             
-            if obj1 < obj2
+            if obj1 < obj2 - 1e-4
                 @printf "check coordinate descent: %f, %f" obj1 obj2
                 @printf "l: %d\n" l
-                error("coordinate descent error") 
+                #error("coordinate descent error") 
             end
             
             #@printf "check coordinate descent: %f, %f" obj1 obj2
@@ -260,22 +313,43 @@ function proximal_newton(X, Y, A, C, lambda, tol=1e-4, eps = 1e-4, maxiter = 100
             W[j,k] = w_jk
             
             
-            #update XW
-            XW2[:,k] += (diff*xj)
+            #update XDelta
+            XDelta[:,k] += (diff*xj)
             
-            check_d[j,k] = diff
+            Delta[j,k] = diff
+            #check_d[j,k] = diff
             
+            #check_d = zeros(D,K)
+            #check_d[j,k] = diff
+            #check_approx1 = lambda*vecnorm( W - check_d ,1)
+            #check_approx2 = 0.5* dot( vec(check_d), H_check*vec(check_d) ) + dot(vec(g), vec(check_d) ) + lambda*vecnorm(W,1)
+            #@printf "approx1: %f, approx2: %f\n" check_approx1 check_approx2
+            #@printf "obj1: %f, obj2: %f \n" obj1 obj2
+            #@printf "approx1 - approx2: %f\n" check_approx1-check_approx2
+            #@printf "obj1 - obj2: %f \n" obj1-obj2
+            #if iter >=2
+            #    check_approx2 = lambda*vecnorm(W, 1) + dot(vec(g), vec(check_d))
+            #    Hd = Ha(X, Y, W, L, XW, vec(check_d), C, lambda)
+            #    check_approx2 += 0.5*( dot(vec(check_d), Hd) )
+            #    @printf "dot: %f\n" dot(vec(g), vec(check_d))
+            #    @printf "hessian part: %f\n" 0.5*( dot(vec(check_d), Hd) )
+            #    @printf "approx1: %f, approx2: %f\n" check_approx1 check_approx2
+            #    @printf "obj1: %f, obj2 %f\n" obj1 obj2
+            #end
         end
         
         ### check approx
         
-        check_approx2 = lambda*vecnorm(W, 1) + dot(vec(g), vec(check_d))
-        Hd = Ha(X, Y, W, L, XW, vec(check_d), C, lambda)
-        check_approx2 += 0.5*( dot(vec(check_d), Hd) )
-        @printf "dot: %f\n" dot(vec(g), vec(check_d))
-        @printf "hessian part: %f\n" 0.5*( dot(vec(check_d), Hd) )
-        @printf "approx1: %f, approx2: %f\n" check_approx1 check_approx2
-        ###
+        #check_approx2 = lambda*vecnorm(W, 1) + dot(vec(g), vec(check_d))
+        #Hd = Ha(X, Y, W, L, XW, vec(check_d), C, lambda)
+        #check_approx2 += 0.5*( dot(vec(check_d), Hd) )
+        #@printf "dot: %f\n" dot(vec(g), vec(check_d))
+        #@printf "hessian part: %f\n" 0.5*( dot(vec(check_d), Hd) )
+        #@printf "approx1: %f, approx2: %f\n" check_approx1 check_approx2
+        
+        ### dense checker
+        #check_approx2 = 0.5* dot( vec(Delta), H_check*vec(Delta) ) + dot(vec(g), vec(Delta) ) + lambda*vecnorm(W,1)
+        #@printf "approx1: %f, approx2: %f\n" check_approx1 check_approx2
         
         obj_new = obj(X, Y, W, A, C, lambda)
         @printf "obj_old: %f, obj_new: %f \n" obj_old obj_new
