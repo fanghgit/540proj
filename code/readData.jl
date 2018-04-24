@@ -11,6 +11,9 @@ function read_cat_hier(filename, K)
         end
         lbl1 = parse(Int, tmp[1])
         lbl2 = parse(Int, tmp[2])
+        if lbl1 > K || lbl2 > K
+            continue 
+        end
         push!(rows, lbl1)
         push!(cols, lbl2)
         push!(vals, 1.0)

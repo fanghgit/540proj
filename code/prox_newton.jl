@@ -138,9 +138,14 @@ function proximal_newton(X, Y, A, C, lambda, tol=1e-4, eps = 1e-4, maxiter = 100
     #@show(size(DG))
     L = sparse(DG - A)
     
+    total_time = 0
+    
     
     iter = 1
     for iter = 1:maxiter
+        
+        tic()
+        
         #if iter >= 2
         #    XW_2 = X*W
         #    vv = vecnorm(XW_2 - XW, 2)^2
@@ -216,7 +221,11 @@ function proximal_newton(X, Y, A, C, lambda, tol=1e-4, eps = 1e-4, maxiter = 100
         #end
         
         ###
+        tic()
         @printf "start coordinate descent!\n"
+        
+        #for inner_iter = 1:3
+        
         for l = 1:length(rows)
             j = rows[l]
             k = cols[l]
@@ -314,29 +323,20 @@ function proximal_newton(X, Y, A, C, lambda, tol=1e-4, eps = 1e-4, maxiter = 100
             
             
             #update XDelta
-            XDelta[:,k] += (diff*xj)
+            #XDelta[:,k] += (diff*xj)
+            for pp = 1:length(idxs)
+                ii = idxs[pp]
+                XDelta[ii,k] += diff*vals[pp]
+            end
             
-            Delta[j,k] = diff
-            #check_d[j,k] = diff
             
-            #check_d = zeros(D,K)
-            #check_d[j,k] = diff
-            #check_approx1 = lambda*vecnorm( W - check_d ,1)
-            #check_approx2 = 0.5* dot( vec(check_d), H_check*vec(check_d) ) + dot(vec(g), vec(check_d) ) + lambda*vecnorm(W,1)
-            #@printf "approx1: %f, approx2: %f\n" check_approx1 check_approx2
-            #@printf "obj1: %f, obj2: %f \n" obj1 obj2
-            #@printf "approx1 - approx2: %f\n" check_approx1-check_approx2
-            #@printf "obj1 - obj2: %f \n" obj1-obj2
-            #if iter >=2
-            #    check_approx2 = lambda*vecnorm(W, 1) + dot(vec(g), vec(check_d))
-            #    Hd = Ha(X, Y, W, L, XW, vec(check_d), C, lambda)
-            #    check_approx2 += 0.5*( dot(vec(check_d), Hd) )
-            #    @printf "dot: %f\n" dot(vec(g), vec(check_d))
-            #    @printf "hessian part: %f\n" 0.5*( dot(vec(check_d), Hd) )
-            #    @printf "approx1: %f, approx2: %f\n" check_approx1 check_approx2
-            #    @printf "obj1: %f, obj2 %f\n" obj1 obj2
-            #end
+            Delta[j,k] += diff
+            
         end
+            
+        #end
+        tt_cd = toq()
+        @printf "CD time: %f \n" tt_cd
         
         ### check approx
         
@@ -351,8 +351,10 @@ function proximal_newton(X, Y, A, C, lambda, tol=1e-4, eps = 1e-4, maxiter = 100
         #check_approx2 = 0.5* dot( vec(Delta), H_check*vec(Delta) ) + dot(vec(g), vec(Delta) ) + lambda*vecnorm(W,1)
         #@printf "approx1: %f, approx2: %f\n" check_approx1 check_approx2
         
+        total_time += toq()
+        
         obj_new = obj(X, Y, W, A, C, lambda)
-        @printf "obj_old: %f, obj_new: %f \n" obj_old obj_new
+        @printf "time: %f, obj_old: %f, obj_new: %f \n" total_time obj_old obj_new
         
         
     end
