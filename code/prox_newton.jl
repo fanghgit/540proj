@@ -1,82 +1,6 @@
 include("misc.jl")
 # Hessian-vector multiplication
 
-function obj_debug(X, Y, W, C)
-    N, D = size(X)
-    K = size(Y, 2)
-    XT = X'
-    XW = X*W
-    
-    res = 0
-    Y_full = 2*(full(Y)-0.5)
-    for k = 1:K
-        res += vecnorm(W[:,k], 2)^2
-        res += C*sum(  (max.(0, 1 - Y_full[:,k].*XW[:,k] ) ).^2 )
-    end
-    return res
-end
-
-function grad_debug(X, Y, W, C)
-    N, D = size(X)
-    K = size(Y, 2)
-    XT = X'
-    XW = X*W
-    
-    res = W
-    for k = 1:K
-        wk = W[:,k]
-        score_k = X*wk
-        Yk = 2*( full(Y[:,k]) - 0.5 )
-        tmp = 1 - Yk.*score_k
-        for j = 1:N
-            if tmp[j] > 0
-                xj = XT[:,j]
-                idx, vals = findnz(xj)
-                for pp = 1:length(idx)
-                    res[ idx[pp] ,k] += (2*C*tmp[j]*(-Yk[j]))*vals[pp] 
-                end
-                #res[:,i] += (2*C*tmp[j]*(-Yi[j]))*xj
-            end
-        end
-        
-    end
-    return res
-    
-end
-
-function newton_debug(X, Y, C, maxiter = 100)
-    N, D = size(X)
-    K = size(Y, 2)
-    XT = X'
-    W = zeros(D, K)
-    
-    for iter = 1:maxiter
-        XW = X*W
-        delta = zeros(D, K)
-        g = grad_debug(X, Y, W, C)
-        
-        obj = obj_debug(X, Y, W, C)
-        @printf "obj: %f\n" obj
-        
-        for k = 1:K
-            score = XW[:,k]
-            DD = zeros(N)
-            Yk = 2*(full(Y[:,k]) -0.5 )
-            for i = 1:N
-                if 1 - Yk[i]*score[i] > 0
-                    DD[i] = 1 
-                end
-            end
-            Tmp = X
-            H = eye(D) + XT*diagm(DD)*X
-            d = H \ g
-            delta[:,k] = d
-        end
-        
-        W = W - delta
-    end
-    
-end
 
 function Ha(X, Y, W, L, XW, a, C, lambda)
     N, D = size(X)
@@ -140,11 +64,16 @@ function proximal_newton(X, Y, A, C, lambda, tol=1e-4, eps = 1e-4, maxiter = 100
     
     total_time = 0
     
+    #output
+    time_list = []
+    obj_list = []
+    nz_list = []
     
+    tic()
     iter = 1
     for iter = 1:maxiter
         
-        tic()
+        
         
         #if iter >= 2
         #    XW_2 = X*W
@@ -186,11 +115,15 @@ function proximal_newton(X, Y, A, C, lambda, tol=1e-4, eps = 1e-4, maxiter = 100
         #get active set
         rows = zeros(Int64, 0)
         cols = zeros(Int64, 0)
+        nz = 0
         for j = 1:D
             for k = 1:K
                 if abs(g[j,k]) > lambda - eps || W[j,k] != 0
                     push!(rows, j)
                     push!(cols, k)
+                end
+                if W[j,k] != 0
+                   nz += 1 
                 end
             end
         end
@@ -198,6 +131,16 @@ function proximal_newton(X, Y, A, C, lambda, tol=1e-4, eps = 1e-4, maxiter = 100
         #coordinate update
         #w = vec(W)
         obj_old = obj(X, Y, W, A, C, lambda)
+        
+        
+        total_time += toq()
+        tic()
+        
+        push!(time_list, total_time)
+        push!(obj_list, obj_old)
+        push!(nz_list, nz)
+        
+        
         #permutation
         perm = randperm(length(rows))
         rows = rows[perm]
@@ -221,7 +164,7 @@ function proximal_newton(X, Y, A, C, lambda, tol=1e-4, eps = 1e-4, maxiter = 100
         #end
         
         ###
-        tic()
+        #tic()
         @printf "start coordinate descent!\n"
         
         #for inner_iter = 1:3
@@ -335,8 +278,8 @@ function proximal_newton(X, Y, A, C, lambda, tol=1e-4, eps = 1e-4, maxiter = 100
         end
             
         #end
-        tt_cd = toq()
-        @printf "CD time: %f \n" tt_cd
+        #tt_cd = toq()
+        #@printf "CD time: %f \n" tt_cd
         
         ### check approx
         
@@ -351,14 +294,17 @@ function proximal_newton(X, Y, A, C, lambda, tol=1e-4, eps = 1e-4, maxiter = 100
         #check_approx2 = 0.5* dot( vec(Delta), H_check*vec(Delta) ) + dot(vec(g), vec(Delta) ) + lambda*vecnorm(W,1)
         #@printf "approx1: %f, approx2: %f\n" check_approx1 check_approx2
         
-        total_time += toq()
+        
         
         obj_new = obj(X, Y, W, A, C, lambda)
         @printf "time: %f, obj_old: %f, obj_new: %f \n" total_time obj_old obj_new
-        
-        
+         
     end
-    return W;
+    
+    #writedlm("rcv1_newton.csv", [time_list obj_list nz_list], ',');
+
+    
+    return W, time_list, obj_list, nz_list;
 end
 
 function proximal_gradient(X, Y, A, C, lambda, tol=1e-4, maxiter = 100, max_inner_iter = 20)
@@ -372,8 +318,15 @@ function proximal_gradient(X, Y, A, C, lambda, tol=1e-4, maxiter = 100, max_inne
         Diag[i] = sum( A[:,i] ) 
     end
     DG = diagm(Diag)
-    L = DG - A
+    L = sparse( DG - A )
     
+    time_list = []
+    obj_list = []
+    nz_list = []
+    
+    tic()
+    
+    tt = 0
     # iterative gradient
     iter = 1
     for iter = 1:maxiter
@@ -383,6 +336,25 @@ function proximal_gradient(X, Y, A, C, lambda, tol=1e-4, maxiter = 100, max_inne
         #d = zeros(D)
         alpha = 1
         obj_old = obj(X, Y, W, A, C, lambda)
+        
+        tt += toq()
+        push!(time_list, tt)
+        push!(obj_list, obj_old)
+        nz = 0
+        for k=1:K
+            for j=1:D
+                if W[j,k] != 0
+                   nz += 1 
+                end
+            end
+        end
+        push!(nz_list, nz)
+        
+        @printf "time: %f, obj: %f, nz: %f\n" tt obj_old nz
+        
+        
+        tic()
+        
         @printf "obj complete\n"
         for inner_iter = 1:max_inner_iter
             threshold = alpha*lambda
@@ -406,12 +378,14 @@ function proximal_gradient(X, Y, A, C, lambda, tol=1e-4, maxiter = 100, max_inne
                 println("stepsize: ", alpha)
                 break 
             end
-            alpha = alpha/2 
+            alpha = alpha/10
             if inner_iter == max_inner_iter
                 error("linesearch failed") 
             end
         end
+        
         @printf "iter %d finished!\n" iter
+        
     end
-    return W
+    return W, time_list, obj_list, nz_list
 end
